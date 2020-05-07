@@ -8,12 +8,14 @@ From Coq Require Import
 
 (*rewriting with eq*)
 
-Goal forall (a b c d : nat), a = b -> b = c -> c = d -> a = d.
+Local Open Scope Z_scope.
+
+Goal forall (a b c d : Z), a = b -> b = c -> c = d -> a = d.
 Proof.
   intros a b c d Hab Hbc Hcd. rewrite Hab. rewrite Hbc. auto.
 Qed.
 
-Goal forall (a b c x y z : nat), a = x -> b = y -> c = z -> 
+Goal forall (a b c x y z : Z), a = x -> b = y -> c = z -> 
                                            a + b + c = x + y + z.
 Proof.
   intros a b c x y z Hax Hby Hcz. rewrite Hax. rewrite Hby. rewrite Hcz.
@@ -21,7 +23,7 @@ Proof.
 Qed.
 
 Section ModularArith.
-  Local Open Scope Z_scope.
+  
   Context (k : Z).
 
   Definition equiv (n m : Z) : Prop := exists (x y : Z), n + x * k = m + y * k.
@@ -31,17 +33,38 @@ Section ModularArith.
   Ltac invert_ex := 
     repeat match goal with | H : ex _ _ |- _ => destruct H as [?x ?Hx] end.
 
-  Instance equiv_equiv : Equivalence equiv.
+  Instance trans_equiv : Transitive equiv.
   Proof.
-    constructor; try unfold equiv; red; intros.
-    - exists 0. exists 0. auto.
-    - destruct H as [n [m Hnm] ]. exists m. exists n. omega.
-    - destruct H as [n0 [m0 Hnm0] ]. destruct H0 as [n1 [m1 Hnm1] ].
+    red. unfold equiv. intros.
+    destruct H as [n0 [m0 Hnm0] ]. destruct H0 as [n1 [m1 Hnm1] ].
       assert (Hy  : y = x + n0 * k - (m0 * k)); try omega.
       assert (Hfact : n0 * k - m0 * k = (n0 - m0) * k); try ring.
       rewrite <- Z.add_sub_assoc in Hy. rewrite Hfact in Hy.
       rewrite Hy in Hnm1. exists (n0 -m0 + n1). exists m1.
       rewrite <- Hnm1. ring.
+  Qed.
+
+  Goal forall (a b c : Z), a ≡ b -> b ≡ c -> a ≡ c.
+  Proof.
+    intros. rewrite H. Fail (rewrite <- H).
+    auto.
+  Qed.
+
+  Instance sym_equiv : Symmetric equiv.
+  Proof. 
+    red. intros. destruct H as [n [m Hnm] ]. exists m. exists n. omega.
+  Qed.
+
+  Goal forall (a b c : Z), a ≡ b -> b ≡ c -> a ≡ c.
+  Proof.
+    intros. rewrite H. rewrite <- H. rewrite <- H0.
+    rewrite H0. rewrite H. auto.
+  Qed.
+
+  Instance equiv_equiv : Equivalence equiv.
+  Proof.
+    constructor. all: try apply trans_equiv; try apply sym_equiv; try unfold equiv; red; intros.
+    exists 0. exists 0. auto.
   Qed.
 
   Goal forall (a b c d : Z), a ≡ b -> b ≡ c -> c ≡ d -> a ≡ d.
@@ -71,9 +94,13 @@ Section ModularArith.
 
   Goal Proper (equiv ==> equiv) (fun x => x + 2).
   Proof.
-    red. unfold respectful. intros.
+    intros ? ? ?.
     unfold equiv in *. destruct H. destruct H. exists x0. exists x1. omega.
-  Qed.
+  Qed. 
+
+  Goal Proper ((fun x y => x > y) ==> equiv) (fun x => x + 2).
+  Proof.
+    intros ? ? ?. Abort.
   (*
 fun (A B : U) (R : relation A) (R' : relation B) (f g : A -> B) =>     
 forall x y : A, R x y -> R' (f x) (g y)
@@ -81,41 +108,50 @@ forall x y : A, R x y -> R' (f x) (g y)
 
 *)
 
-  Instance add_proper_l {x: Z} : Proper (equiv ==> equiv) (Z.add x).
+  Instance add_proper_r {x: Z} : Proper (equiv ==> equiv) (Z.add x).
   Proof.
-    repeat intro. unfold equiv in *.
+    intros y z H. unfold equiv in *.
     destruct H as [n [m Hnm] ]. exists n. exists m. 
     omega.
   Qed.
 
-  Instance add_proper : Proper (equiv ==> equiv ==> equiv) Z.add.
-  Proof.
-    repeat intro. rewrite <- H0. Fail rewrite H. 
-    rewrite Z.add_comm. rewrite H. rewrite Z.add_comm.
-    reflexivity.
-  Qed.
-  
+
   Goal forall x, x + k ≡ x.
   Proof.
-    setoid_rewrite k_equiv_0.
-    intros. rewrite Z.add_comm. simpl. reflexivity.
+    intros. rewrite k_equiv_0.
+    rewrite Z.add_comm. simpl. reflexivity.
   Qed.
 
   Goal forall x, k + x ≡ x.
   Proof.
     intros. 
-    setoid_rewrite k_equiv_0. reflexivity.
+    Fail rewrite k_equiv_0. 
+  Abort.  
+
+  Instance add_proper : Proper (equiv ==> equiv ==> equiv) Z.add.
+  Proof.
+    intros x y  Hxy z w Hzw.
+    rewrite <- Hzw. Fail rewrite Hxy. 
+    rewrite Z.add_comm. rewrite Hxy. rewrite Z.add_comm.
+    reflexivity.
+  Qed.
+  
+
+  Goal forall x, k + x ≡ x.
+  Proof.
+    intros. 
+    rewrite k_equiv_0. reflexivity.
   Qed.
 
   Goal forall x : Z, k + x ≡ k + x + k.
   Proof.
-    intros. setoid_rewrite k_equiv_0. simpl. 
+    intros. rewrite k_equiv_0. simpl. 
     rewrite Z.add_comm. reflexivity.
   Qed.
 
  Goal forall x : Z, k + (x + ( k + k ) + k) ≡ k + k + (k + k) + ( (k + k) + (k + k)  ) + x. 
    Proof.
-     intros. setoid_rewrite k_equiv_0. simpl. rewrite Z.add_comm. simpl.
+     intros. rewrite k_equiv_0. simpl. rewrite Z.add_comm. simpl.
      rewrite Z.add_comm. reflexivity.
    Qed.
 
@@ -132,7 +168,7 @@ Section StateMonad.
   Definition bind {A B} (m : State A) (f : A -> State B) :=
     fun s => let '(s',a) := m s in f a s'.
 
-   Notation "m ;; f" := (bind m f) (at level 70).
+   Notation "m >>= f" := (bind m f) (at level 70).
 
   Definition state_eq {A : Type} (m1 m2 : State A) :=
     forall (s : S), m1 s = m2 s.
@@ -146,23 +182,25 @@ Section StateMonad.
   Qed.
 
   Lemma bind_ret : forall (A B : Type) (a : A) (f : A -> State B),
-        ret a ;; f ≈ f a.
+        ret a >>= f ≈ f a.
     intros. red. intros. cbn. auto.
   Qed.
 
   Lemma ret_bind : forall (A : Type) (m : State A),
-      m ;; ret ≈ m.
+      m >>= ret ≈ m.
   Proof.
     intros. red. intros. cbv. destruct (m s). auto.
   Qed.
 
   Lemma bind_bind : forall (A B C : Type) (m : State A) 
                            (f : A -> State B) (g : B -> State C),
-      (m ;; f) ;; g ≈ (m ;; (fun a => f a ;; g)).
+      (m >>= f) >>= g ≈ (m >>= (fun a => f a >>= g)).
   Proof.
     intros. red. intros. cbv. destruct (m s). auto.
   Qed.
       
+
+  Print pointwise_relation.
 
   Instance proper_monad {A B: Type} : Proper (@state_eq A ==> pointwise_relation A state_eq ==> @state_eq B) (bind).
   Proof.
@@ -174,7 +212,7 @@ Section StateMonad.
   Qed.
 
   Goal forall (A B :Type) (a : A) (f : A -> State B),
-      ret a ;; (fun a' => f a') ;; ret ≈ f a.
+      ret a >>= (fun a' => f a') >>= ret ≈ f a.
   Proof.
     intros. rewrite bind_bind. rewrite bind_ret. rewrite ret_bind.
     reflexivity.
